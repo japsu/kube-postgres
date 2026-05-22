@@ -77,9 +77,18 @@ tasks:
     preconditions:
       - sh: test -n "{{.APP}}"
         msg: "Usage: task cnpg:app:deploy -- APPNAME"
+      - sh: command -v yq
+        msg: "yq is required: brew install yq"
+      - sh: kubectl get secret {{.APP}}-credentials -n postgres -o name 2>/dev/null
+        msg: "Secret '{{.APP}}-credentials' not found. Run: task credentials:create -- {{.APP}}"
     env:
       KUBECONFIG: "{{.TASKFILE_DIR}}/kubeconfig-orbstack.yaml"
     cmds:
+      - |
+        if ! yq '.spec.managed.roles[].name' manifests/cluster.yaml 2>/dev/null | grep -q '^{{.APP}}$'; then
+          yq -i '.spec.managed.roles = (.spec.managed.roles // []) + [{"name": "{{.APP}}", "login": true, "passwordSecret": {"name": "{{.APP}}-credentials"}}]' manifests/cluster.yaml
+        fi
+      - kubectl apply -f manifests/cluster.yaml
       - |
         kubectl apply -f - <<EOF
         apiVersion: postgresql.cnpg.io/v1

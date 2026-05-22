@@ -27,7 +27,7 @@ cloud-init/
   worker.yaml                   k3s agent setup; ${K3S_TOKEN} and ${CP_IP} substituted at VM creation
 .cluster-token                  generated once by vms:create, persisted, gitignored
 manifests/
-  cluster.yaml                  CNPG Cluster (3 instances, required pod anti-affinity)
+  cluster.yaml                  CNPG Cluster (3 instances, required pod anti-affinity); managed roles appended by cnpg:app:deploy
 kubeconfig-orbstack.yaml        written by k3s:kubeconfig, gitignored
 ```
 
@@ -43,8 +43,8 @@ kubeconfig-orbstack.yaml        written by k3s:kubeconfig, gitignored
 - `task credentials:copy` propagates them to the app namespace
 
 **Adding a new project**
-1. `task credentials:create -- <app>` — creates the k8s secret
-2. `task cnpg:app:deploy -- <app>` — creates the Database CRD (database + owner role)
+1. `task credentials:create -- <app>` — creates the k8s secret (must run first; cnpg:app:deploy checks for it)
+2. `task cnpg:app:deploy -- <app>` — patches `manifests/cluster.yaml` to add the managed role, applies the cluster, then creates the Database CRD
 3. `task credentials:copy -- <app>` — copies secret to the app namespace
 
 **Connection strings from app pods**

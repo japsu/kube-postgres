@@ -16,6 +16,7 @@ OrbStack     https://orbstack.dev
 go-task      brew install go-task
 helm         brew install helm
 kubectl      bundled with OrbStack / brew install kubectl
+yq           brew install yq
 ```
 
 ## Quick start
@@ -31,15 +32,17 @@ k3s is provisioned automatically via cloud-init when the VMs boot — no separat
 ## Adding a project
 
 ```bash
-# 1. Create credentials secret in the postgres namespace
+# 1. Generate credentials secret in the postgres namespace (must come first)
 task credentials:create -- myapp
 
-# 2. Create the Database CRD (sets up the PostgreSQL database and owner role)
+# 2. Add managed role to cluster, apply it, and create the Database CRD
 task cnpg:app:deploy -- myapp
 
 # 3. Copy credentials to the app's own namespace
 task credentials:copy -- myapp
 ```
+
+`cnpg:app:deploy` patches `manifests/cluster.yaml` to add the PostgreSQL role (referencing the credentials secret), re-applies the cluster, then creates the `Database` CRD. The file stays in sync so a full `task up` from scratch works without extra steps.
 
 Apps connect to:
 - writes: `postgres-rw.postgres.svc.cluster.local:5432`
