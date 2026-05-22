@@ -1,0 +1,10 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: myapp
+  namespace: postgres-test
+spec:
+  name: myapp
+  owner: myapp
+  cluster:
+    name: postgres-test

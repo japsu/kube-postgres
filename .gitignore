@@ -1,0 +1,14 @@
+# Credentials and cluster secrets — never commit these
+.cluster-token
+kubeconfig-orbstack.yaml
+
+# Python virtualenv
+.venv/
+
+# Ansible Galaxy roles — reinstalled via `task claude:install` or `task k3s:roles`
+ansible/roles/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo

@@ -1,0 +1,196 @@
+version: '3'
+
+env:
+  HELM_CACHE_HOME: /private/tmp/claude-501/helm-cache
+  HELM_CONFIG_HOME: /private/tmp/claude-501/helm-config
+  HELM_DATA_HOME: /private/tmp/claude-501/helm-data
+
+tasks:
+  vms:create:
+    desc: Create OrbStack VMs (skips existing); k3s is provisioned via cloud-init at boot
+    cmds:
+      - |
+        [ -f .cluster-token ] || openssl rand -hex 32 > .cluster-token
+        export K3S_TOKEN=$(cat .cluster-token)
+
+        if ! orb list | awk '{print $1}' | grep -q '^k3s-cp$'; then
+          envsubst '$K3S_TOKEN' < cloud-init/control-plane.yaml \
+            > /private/tmp/claude-501/cloud-init-cp.yaml
+          orb create ubuntu k3s-cp --user-data /private/tmp/claude-501/cloud-init-cp.yaml
+        fi
+
+        echo "Waiting for k3s to be active on k3s-cp..."
+        until orb run -m k3s-cp systemctl is-active k3s 2>/dev/null | grep -q "^active"; do
+          sleep 3
+        done
+
+        export CP_IP=$(orb list | awk '/^k3s-cp/{print $NF}')
+        echo "Control plane IP: ${CP_IP}"
+
+        for W in k3s-w1 k3s-w2; do
+          if ! orb list | awk '{print $1}' | grep -q "^${W}$"; then
+            envsubst '$K3S_TOKEN $CP_IP' < cloud-init/worker.yaml \
+              > /private/tmp/claude-501/cloud-init-${W}.yaml
+            orb create ubuntu "$W" --user-data /private/tmp/claude-501/cloud-init-${W}.yaml
+          fi
+        done
+
+  vms:delete:
+    desc: Delete OrbStack VMs
+    cmds:
+      - orb delete -f k3s-cp || true
+      - orb delete -f k3s-w1 || true
+      - orb delete -f k3s-w2 || true
+
+  k3s:kubeconfig:
+    desc: Fetch kubeconfig from control plane, write kubeconfig-orbstack.yaml
+    cmds:
+      - >
+        orb run -m k3s-cp -u root cat /etc/rancher/k3s/k3s.yaml
+        | sed 's|server: https://127.0.0.1:6443|server: https://k3s-cp.orb.local:6443|'
+        > kubeconfig-orbstack.yaml
+    generates:
+      - kubeconfig-orbstack.yaml
+
+  cnpg:install:
+    desc: Install CloudNativePG operator via Helm
+    env:
+      KUBECONFIG: "{{.TASKFILE_DIR}}/kubeconfig-orbstack.yaml"
+    cmds:
+      - helm repo add cnpg https://cloudnative-pg.github.io/charts
+      - helm repo update cnpg
+      - helm upgrade --install cnpg-operator cnpg/cloudnative-pg
+          --namespace cnpg-system --create-namespace --wait
+
+  cnpg:deploy:
+    desc: Create postgres namespace and deploy the CNPG cluster
+    env:
+      KUBECONFIG: "{{.TASKFILE_DIR}}/kubeconfig-orbstack.yaml"
+    cmds:
+      - kubectl create namespace postgres --dry-run=client -o yaml | kubectl apply -f -
+      - kubectl apply -f manifests/cluster.yaml
+
+  cnpg:app:deploy:
+    desc: "Create or update Database CRD for an app. Usage: task cnpg:app:deploy -- APPNAME"
+    vars:
+      APP: '{{.CLI_ARGS | trim}}'
+    preconditions:
+      - sh: test -n "{{.APP}}"
+        msg: "Usage: task cnpg:app:deploy -- APPNAME"
+    env:
+      KUBECONFIG: "{{.TASKFILE_DIR}}/kubeconfig-orbstack.yaml"
+    cmds:
+      - |
+        kubectl apply -f - <<EOF
+        apiVersion: postgresql.cnpg.io/v1
+        kind: Database
+        metadata:
+          name: {{.APP}}
+          namespace: postgres
+        spec:
+          name: {{.APP}}
+          owner: {{.APP}}
+          cluster:
+            name: postgres
+        EOF
+
+  up:
+    desc: Full cluster setup from scratch
+    cmds:
+      - task: vms:create
+      - task: k3s:kubeconfig
+      - task: cnpg:install
+      - task: cnpg:deploy
+
+  down:
+    desc: Tear down all VMs (data will be lost)
+    cmds:
+      - task: vms:delete
+
+  # ── psql ─────────────────────────────────────────────────────────────────────
+
+  psql:port-forward:
+    desc: Forward postgres-rw to localhost:5433 (keep running; Ctrl-C to stop)
+    env:
+      KUBECONFIG: "{{.TASKFILE_DIR}}/kubeconfig-orbstack.yaml"
+    cmds:
+      - kubectl port-forward svc/postgres-rw 5433:5432 -n postgres
+
+  psql:connect:
+    desc: "Connect to postgres as an app user. Usage: task psql:connect -- APPNAME"
+    vars:
+      APP: '{{.CLI_ARGS | trim}}'
+    preconditions:
+      - sh: test -n "{{.APP}}"
+        msg: "Usage: task psql:connect -- APPNAME"
+      - sh: kubectl get secret {{.APP}}-credentials -n postgres -o name 2>/dev/null
+        msg: "Secret '{{.APP}}-credentials' not found. Run: task credentials:create -- {{.APP}}"
+    env:
+      KUBECONFIG: "{{.TASKFILE_DIR}}/kubeconfig-orbstack.yaml"
+    cmds:
+      - |
+        USERNAME=$(kubectl get secret {{.APP}}-credentials -n postgres \
+          -o jsonpath='{.data.username}' | base64 -d)
+        PASSWORD=$(kubectl get secret {{.APP}}-credentials -n postgres \
+          -o jsonpath='{.data.password}' | base64 -d)
+        PGPASSWORD="$PASSWORD" psql -h localhost -p 5433 -U "$USERNAME" "$USERNAME"
+
+  # ── Credentials ──────────────────────────────────────────────────────────────
+
+  credentials:create:
+    desc: "Create or rotate DB credentials for an app. Usage: task credentials:create -- APPNAME"
+    vars:
+      APP: '{{.CLI_ARGS | trim}}'
+    preconditions:
+      - sh: test -n "{{.APP}}"
+        msg: "Usage: task credentials:create -- APPNAME"
+    env:
+      KUBECONFIG: "{{.TASKFILE_DIR}}/kubeconfig-orbstack.yaml"
+    cmds:
+      - |
+        PASSWORD=$(openssl rand -base64 24)
+        kubectl create secret generic {{.APP}}-credentials \
+          -n postgres \
+          --from-literal=username={{.APP}} \
+          --from-literal=password="$PASSWORD" \
+          --dry-run=client -o yaml | kubectl apply -f -
+        echo "Secret '{{.APP}}-credentials' created/updated in namespace postgres"
+
+  credentials:copy:
+    desc: "Copy credentials from postgres namespace to an app namespace. Usage: task credentials:copy -- APPNAME"
+    vars:
+      APP: '{{.CLI_ARGS | trim}}'
+    preconditions:
+      - sh: test -n "{{.APP}}"
+        msg: "Usage: task credentials:copy -- APPNAME"
+    env:
+      KUBECONFIG: "{{.TASKFILE_DIR}}/kubeconfig-orbstack.yaml"
+    cmds:
+      - kubectl create namespace {{.APP}} --dry-run=client -o yaml | kubectl apply -f -
+      - |
+        kubectl get secret {{.APP}}-credentials -n postgres -o json \
+          | python3 -c "
+        import sys, json
+        s = json.load(sys.stdin)
+        del s['metadata']['namespace']
+        s['metadata'].pop('resourceVersion', None)
+        s['metadata'].pop('uid', None)
+        s['metadata'].pop('creationTimestamp', None)
+        s['metadata'].pop('annotations', None)
+        s['metadata'].pop('managedFields', None)
+        print(json.dumps(s))" \
+          | kubectl apply -n {{.APP}} -f -
+        echo "Secret '{{.APP}}-credentials' copied to namespace {{.APP}}"
+
+  # ── Claude / sandbox ─────────────────────────────────────────────────────────
+
+  claude:install:
+    desc: First-run setup — creates sandbox tmp dirs for Helm
+    cmds:
+      - mkdir -p /private/tmp/claude-501/helm-cache /private/tmp/claude-501/helm-config /private/tmp/claude-501/helm-data
+
+  claude:start:
+    desc: Start a Claude Code session for this project under the clank sandbox profile
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - nono run --profile clank -- claude

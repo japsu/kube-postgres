@@ -1,0 +1,7 @@
+#cloud-config
+runcmd:
+  - >-
+    curl -sfL https://get.k3s.io |
+    K3S_TOKEN='${K3S_TOKEN}'
+    K3S_URL='https://${CP_IP}:6443'
+    sh -s -
