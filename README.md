@@ -75,7 +75,3 @@ task psql:connect -- myapp
 | `task psql:connect -- APP` | Connect as app user (requires port-forward) |
 | `task claude:install` | Create sandbox tmp dirs (first-time setup) |
 | `task claude:start` | Start Claude Code under the clank nono profile |
-
-## Root-level legacy files
-
-`cluster-test.yaml`, `database-myapp.yaml`, and `myapp-test-pod.yaml` are from initial single-node exploration on the built-in OrbStack Kubernetes (namespace `postgres-test`). Not part of the multi-node setup.
