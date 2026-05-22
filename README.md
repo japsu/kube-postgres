@@ -1,6 +1,10 @@
 # kube-postgres
 
-Repeatable multi-node Kubernetes cluster running [CloudNativePG](https://cloudnative-pg.io/) for fault-tolerant PostgreSQL. Built on OrbStack VMs for local development.
+Local OrbStack virtual machine environment for trying out multi-node Kubernetes clusters running [CloudNativePG](https://cloudnative-pg.io/) for fault-tolerant PostgreSQL.
+
+## Not using OrbStack?
+
+If you are not using OrbStack, ask your pet robot to adapt it to whatever means you are using for running local VMs. It should be fairly straightforward to replace the `orb` command and `.orb.local` DNS with environment-appropriate ones. The magic is in the `cloud-init` which should be fairly universal across VM managers.
 
 ## Architecture
 
@@ -18,6 +22,22 @@ helm         brew install helm
 kubectl      bundled with OrbStack / brew install kubectl
 yq           brew install yq
 ```
+
+## Sandbox
+
+This setup was developed to run under a [Nono](https://github.com/always-further/nono) sandbox with the [claude-code](https://github.com/always-further/nono-packs/tree/main/claude) profile. To use the sandbox, you can prefix any `task` etc. commands as follows:
+
+```
+nono run --profile claude-code --allow-cwd --allow ~/.orbstack -- task up
+```
+
+You need not use Nono for this setup to work. However, you may need to run
+
+```
+task claude:install
+```
+
+to create some temp directories under `/private/tmp/claude-501` (or redirect those paths in `Taskfile.yaml`).
 
 ## Quick start
 

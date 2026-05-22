@@ -1,6 +1,7 @@
 version: '3'
 
 env:
+  CLAUDE_TEMP_DIR: /private/tmp/claude-501
   HELM_CACHE_HOME: /private/tmp/claude-501/helm-cache
   HELM_CONFIG_HOME: /private/tmp/claude-501/helm-config
   HELM_DATA_HOME: /private/tmp/claude-501/helm-data
@@ -15,8 +16,8 @@ tasks:
 
         if ! orb list | awk '{print $1}' | grep -q '^k3s-cp$'; then
           envsubst '$K3S_TOKEN' < cloud-init/control-plane.yaml \
-            > /private/tmp/claude-501/cloud-init-cp.yaml
-          orb create ubuntu k3s-cp --user-data /private/tmp/claude-501/cloud-init-cp.yaml
+            > $CLAUDE_TEMP_DIR/cloud-init-cp.yaml
+          orb create ubuntu k3s-cp --user-data "$CLAUDE_TEMP_DIR/cloud-init-cp.yaml"
         fi
 
         echo "Waiting for k3s to be active on k3s-cp..."
@@ -30,8 +31,8 @@ tasks:
         for W in k3s-w1 k3s-w2; do
           if ! orb list | awk '{print $1}' | grep -q "^${W}$"; then
             envsubst '$K3S_TOKEN $CP_IP' < cloud-init/worker.yaml \
-              > /private/tmp/claude-501/cloud-init-${W}.yaml
-            orb create ubuntu "$W" --user-data /private/tmp/claude-501/cloud-init-${W}.yaml
+              > $CLAUDE_TEMP_DIR/cloud-init-${W}.yaml
+            orb create ubuntu "$W" --user-data "$CLAUDE_TEMP_DIR/cloud-init-${W}.yaml"
           fi
         done
 
@@ -196,10 +197,10 @@ tasks:
   claude:install:
     desc: First-run setup — creates sandbox tmp dirs for Helm
     cmds:
-      - mkdir -p /private/tmp/claude-501/helm-cache /private/tmp/claude-501/helm-config /private/tmp/claude-501/helm-data
+      - mkdir -p $CLAUDE_TEMP_DIR/helm-cache $CLAUDE_TEMP_DIR/helm-config $CLAUDE_TEMP_DIR/helm-data
 
   claude:start:
     desc: Start a Claude Code session for this project under the claude-code sandbox profile
     dir: "{{.TASKFILE_DIR}}"
     cmds:
-      - nono run --profile claude-code -- claude
+      - nono run --profile claude-code --allow-cwd --allow ~/.orbstack -- claude

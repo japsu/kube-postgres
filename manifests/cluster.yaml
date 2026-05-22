@@ -12,3 +12,9 @@ spec:
     size: 10Gi
   affinity:
     podAntiAffinityType: required
+  managed:
+    roles:
+      - name: someapp
+        login: true
+        passwordSecret:
+          name: someapp-credentials
