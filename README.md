@@ -62,7 +62,7 @@ task cnpg:app:deploy -- myapp
 task credentials:copy -- myapp
 ```
 
-`cnpg:app:deploy` patches `manifests/cluster.yaml` to add the PostgreSQL role (referencing the credentials secret), re-applies the cluster, then creates the `Database` CRD. The file stays in sync so a full `task up` from scratch works without extra steps.
+`cnpg:app:deploy` patches `manifests/cluster.yaml` to add the PostgreSQL role (referencing the credentials secret), re-applies the cluster, then creates the `Database` CRD.
 
 Apps connect to:
 - writes: `postgres-rw.postgres.svc.cluster.local:5432`
