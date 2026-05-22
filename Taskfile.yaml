@@ -199,7 +199,7 @@ tasks:
       - mkdir -p /private/tmp/claude-501/helm-cache /private/tmp/claude-501/helm-config /private/tmp/claude-501/helm-data
 
   claude:start:
-    desc: Start a Claude Code session for this project under the clank sandbox profile
+    desc: Start a Claude Code session for this project under the claude-code sandbox profile
     dir: "{{.TASKFILE_DIR}}"
     cmds:
-      - nono run --profile clank -- claude
+      - nono run --profile claude-code -- claude

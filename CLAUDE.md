@@ -6,8 +6,7 @@ Tooling to spin up a multi-node k3s cluster on OrbStack VMs and run CloudNativeP
 
 ## Sandbox setup
 
-Claude runs under the **clank** nono profile (`nono run --profile clank --allow-cwd -- task <name>`). Key allowed paths:
-- `~/.kube` — for kubectl
+Claude runs under the **claude-code** nono profile (`nono run --profile claude-code --allow-cwd -- task <name>`). Key allowed paths:
 - `~/.orbstack` — for the `orb` CLI
 - `/private/tmp/claude-501` — Helm state and cloud-init rendered templates
 

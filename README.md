@@ -77,4 +77,4 @@ task psql:connect -- myapp
 | `task psql:port-forward` | Forward postgres-rw to localhost:5433 |
 | `task psql:connect -- APP` | Connect as app user (requires port-forward) |
 | `task claude:install` | Create sandbox tmp dirs (first-time setup) |
-| `task claude:start` | Start Claude Code under the clank nono profile |
+| `task claude:start` | Start Claude Code under the claude-code nono profile |
